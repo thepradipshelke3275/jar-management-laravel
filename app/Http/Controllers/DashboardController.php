@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\OrderStatus;
 use App\Helpers\ApiResponse;
 use App\Models\Customer;
 use App\Models\Item;
@@ -20,6 +21,11 @@ class DashboardController extends Controller
         $year = $request->input('year', Carbon::now()->year);
 
         return ApiResponse::success([
+            'orders' => [
+                'total' => Order::count(),
+                'pending' => Order::where('status', OrderStatus::PENDING->value)->count(),
+                'complete' => Order::where('status', OrderStatus::COMPLETED->value)->count(),
+            ],
             'total_customers' => Customer::count(),
             'total_items' => Item::count(),
             'today' => $this->getStats($today),

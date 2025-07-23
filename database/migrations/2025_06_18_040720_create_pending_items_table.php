@@ -15,10 +15,12 @@ return new class extends Migration {
             $table->foreignId('item_id')->constrained()->cascadeOnDelete();
 
             $table->integer('quantity');
+            $table->date('order_date');
 
             $table->timestamps();
 
             $table->primary(['customer_id', 'item_id']);
+            
 
         });
     }

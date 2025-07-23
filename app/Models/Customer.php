@@ -17,7 +17,7 @@ class Customer extends Model
     public function pendingItems(): BelongsToMany
     {
         return $this->belongsToMany(Item::class, 'pending_items')
-            ->withPivot('quantity')
+            ->withPivot('quantity', 'order_date')
             ->withTimestamps();
     }
 

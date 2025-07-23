@@ -29,9 +29,35 @@ class OrderController extends Controller
 
         try {
             $validated = $request->validated();
-
-            // Create Order
+            
             $order = Order::create($validated);
+
+            $customer = $order->customer;
+
+            if (!empty($validated['returned_items'])) {
+                foreach ($validated['returned_items'] as $returnedItem) {
+                    $itemId = $returnedItem['item_id'];
+                    $returnQty = $returnedItem['quantity'];
+
+                    $order->returnedItems()->attach($itemId, [
+                        'quantity' => $returnQty,
+                    ]);
+                    
+                    $pending = $customer->pendingItems()->where('item_id', $itemId)->first();
+
+                    if ($pending) {
+                        $newQty = $pending->pivot->quantity - $returnQty;
+
+                        if ($newQty <= 0) {
+                            $customer->pendingItems()->detach($itemId);
+                        } else {
+                            $customer->pendingItems()->updateExistingPivot($itemId, [
+                                'quantity' => $newQty,
+                            ]);
+                        }
+                    }
+                }
+            }
 
             // Attach Order Items
             foreach ($validated['items'] as $itemData) {
@@ -48,30 +74,8 @@ class OrderController extends Controller
                     $newQty = $pending->pivot->quantity + $itemData['quantity'];
                     $customer->pendingItems()->updateExistingPivot($itemData['item_id'], ['quantity' => $newQty]);
                 } else {
-                    $customer->pendingItems()->attach($itemData['item_id'], ['quantity' => $itemData['quantity']]);
-                }
-            }
-
-            // Handle Returned Items
-            if (!empty($validated['returned_items'])) {
-                foreach ($validated['returned_items'] as $returnedItem) {
-                    $order->returnedItems()->attach($returnedItem['item_id'], [
-                        'quantity' => $returnedItem['quantity'],
-                    ]);
-
-                    // Update pending items
-                    $customer = $order->customer;
-                    $pending = $customer->pendingItems()->where('item_id', $returnedItem['item_id'])->first();
-
-                    if ($pending) {
-                        $newQty = $pending->pivot->quantity - $returnedItem['quantity'];
-                        if ($newQty <= 0) {
-                            $customer->pendingItems()->detach($returnedItem['item_id']);
-                        } else {
-                            $customer->pendingItems()->updateExistingPivot($returnedItem['item_id'],
-                                ['quantity' => $newQty]);
-                        }
-                    }
+                    $customer->pendingItems()->attach($itemData['item_id'],
+                        ['quantity' => $itemData['quantity'], 'order_date' => $request->validated('date')]);
                 }
             }
 
@@ -80,7 +84,7 @@ class OrderController extends Controller
 
         } catch (Throwable $e) {
             DB::rollBack();
-            return ApiResponse::error(null, 'Failed to create order', 500, [
+            return ApiResponse::error('Failed to create order', 500, [
                 'message' => $e->getMessage(),
             ]);
         }
@@ -142,6 +146,7 @@ class OrderController extends Controller
                 } else {
                     $customer->pendingItems()->attach($returnedItem->id, [
                         'quantity' => $returnedItem->pivot->quantity,
+                        'order_date' => $order->date,
                     ]);
                 }
             }
@@ -153,7 +158,7 @@ class OrderController extends Controller
             return ApiResponse::noContent();
         } catch (Throwable $e) {
             DB::rollBack();
-            return ApiResponse::error(null, 'Failed to delete order', 500, [
+            return ApiResponse::error('Failed to delete order', 500, [
                 'message' => $e->getMessage(),
             ]);
         }
